@@ -1,0 +1,4 @@
+python-telegram-bot>=13.0
+requests
+supabase-py
+# 或如需 firebase 請改用 firebase-admin 
