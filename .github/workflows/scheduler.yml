@@ -1,0 +1,40 @@
+name: Railway 定時開關機
+
+on:
+  schedule:
+    # 每天上午 07:00 UTC 啟動服務 (相當於台灣時間 15:00)
+    - cron: '0 7 * * *'
+    # 每天上午 01:00 UTC 關閉服務 (相當於台灣時間 09:00)
+    - cron: '0 1 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  manage-railway:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 檢查當前時間
+        id: check-time
+        run: |
+          HOUR=$(date -u +%H)
+          if [ $HOUR -eq 7 ]; then
+            echo "action=up" >> $GITHUB_OUTPUT
+          else
+            echo "action=down" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 安裝Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: 執行 Railway 操作
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          SERVICE_ID: ${{ secrets.SERVICE_ID }}
+        run: |
+          ACTION=${{ steps.check-time.outputs.action }}
+          if [ "$ACTION" = "up" ]; then
+            echo "啟動 Railway 服務..."
+            railway service restart $SERVICE_ID
+          else
+            echo "關閉 Railway 服務..."
+            railway service delete-deployment $SERVICE_ID --yes
+          fi 
