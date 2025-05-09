@@ -217,7 +217,7 @@ def update_fund(fund_type, amount):
 def parse_date(date_str):
     today = datetime.now()
     
-    if re.match(r'^\\d{4}-\\d{1,2}-\\d{1,2}$', date_str):
+    if re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', date_str):
         return date_str
     elif '/' in date_str:
         month, day = map(int, date_str.split('/'))
