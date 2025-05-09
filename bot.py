@@ -1288,40 +1288,6 @@ def schedule_cleaning():
 @bot.message_handler(func=lambda message: message.text.lower() == 'help' or message.text == '幫助')
 @error_handler
 def handle_help(message):
-    help_text = (
-        "📋 記帳機器人使用說明\n\n"
-        "➖➖➖ 基本命令 ➖➖➖\n"
-        "TW+金額 - 記錄臺幣收入\n"
-        "TW-金額 - 記錄臺幣支出\n"
-        "CN+金額 - 記錄人民幣收入\n"
-        "CN-金額 - 記錄人民幣支出\n\n"
-        "➖➖➖ 高級命令 ➖➖➖\n"
-        "日期 TW+金額 - 記錄特定日期臺幣收入\n"
-        "日期 TW-金額 - 記錄特定日期臺幣支出\n"
-        "日期 CN+金額 - 記錄特定日期人民幣收入\n"
-        "日期 CN-金額 - 記錄特定日期人民幣支出\n\n"
-        "公桶+金額 - 記錄公桶資金增加\n"
-        "公桶-金額 - 記錄公桶資金減少\n"
-        "私人+金額 - 記錄私人資金增加\n"
-        "私人-金額 - 記錄私人資金減少\n\n"
-        "➖➖➖ 設定命令 ➖➖➖\n"
-        "設置今日匯率33.25 - 設定今日匯率\n"
-        "設置\"05/01\"匯率33.44 - 設定特定日期匯率\n"
-        "報表使用者設定 名稱 - 設定報表名稱\n\n"
-        "➖➖➖ 刪除命令 ➖➖➖\n"
-        "刪除\"05/01\"NTD金額 - 刪除特定日期臺幣金額\n"
-        "刪除\"05/01\"CNY金額 - 刪除特定日期人民幣金額\n\n"
-        "➖➖➖ 其他功能 ➖➖➖\n"
-        "📊查看本月報表 - 顯示當月報表\n"
-        "📚歷史報表 - 查看過去月份報表\n"
-    )
-    bot.reply_to(message, help_text)
-
-# 指令說明處理函數
-@bot.message_handler(func=lambda message: message.text == '📋指令說明')
-@error_handler
-def handle_command_help(message):
-    """處理指令說明請求"""
     help_text = """<b>📋 指令說明</b>
 
 <b>🔸 基本指令</b>
@@ -1331,20 +1297,25 @@ def handle_command_help(message):
 
 <b>🔸 報表指令</b>
 📊查看本月報表 - 顯示當月收支報表
+總表 - 顯示所有人的收支總計
 📚歷史報表 - 查看過去月份的報表
 初始化報表 - 清空所有個人報表數據
 
-<b>🔸 記帳指令 (可直接發送或點擊按鈕回覆)</b>
+<b>🔸 記帳指令 (多種格式輸入方式)</b>
 <code>TW+數字</code> - 記錄台幣收入
 <code>TW-數字</code> - 記錄台幣支出
 <code>CN+數字</code> - 記錄人民幣收入
 <code>CN-數字</code> - 記錄人民幣支出
+<code>台幣+數字</code> - 記錄台幣收入 (新增)
+<code>人民幣-數字</code> - 記錄人民幣支出 (新增)
 
 <b>🔸 日期記帳</b>
 <code>日期 TW+數字</code> - 記錄特定日期台幣收入
 <code>日期 TW-數字</code> - 記錄特定日期台幣支出
 <code>日期 CN+數字</code> - 記錄特定日期人民幣收入
 <code>日期 CN-數字</code> - 記錄特定日期人民幣支出
+<code>日期 台幣+數字</code> - 記錄特定日期台幣收入 (新增)
+<code>日期 人民幣-數字</code> - 記錄特定日期人民幣支出 (新增)
 
 <b>🔸 為其他用戶記帳</b>
 <code>@用戶名 日期 TW+數字</code> - 為指定用戶記錄台幣收入
@@ -1357,6 +1328,8 @@ def handle_command_help(message):
 <code>公桶-數字</code> - 減少公桶資金
 <code>私人+數字</code> - 增加私人資金
 <code>私人-數字</code> - 減少私人資金
+<code>公共資金+數字</code> - 增加公桶資金 (新增)
+<code>私人資金-數字</code> - 減少私人資金 (新增)
 
 <b>🔸 匯率設置</b>
 <code>設置今日匯率數字</code> - 設置今日匯率
@@ -1370,6 +1343,11 @@ def handle_command_help(message):
 
 <b>🔸 其他設置</b>
 <code>報表使用者設定 名稱</code> - 設置報表標題名稱
+
+<b>🔸 機器人運行狀態</b>
+每日早上 7:00 機器人會自動開機，並發送開機通知
+每日凌晨 2:00 機器人會自動休眠，並發送休眠通知
+您可以隨時使用 <code>/start</code> 喚醒機器人
 
 <b>🔸 群組管理</b>
 ⚙️群管設定 - 開啟群組管理選單"""
@@ -3353,8 +3331,9 @@ def handle_direct_cn_subtract(message):
 
 # 移除既有的處理函數
 # 處理直接輸入的記帳格式 - 同時處理多種格式
-@bot.message_handler(func=lambda message: re.match(r'^\s*(?:TW|CN)[+\-]\s*\d+(?:\.\d+)?\s*$', message.text) or 
-                                         re.match(r'^\s*(?:[0-9/\-\.]+)\s+(?:TW|CN)[+\-]\s*\d+(?:\.\d+)?\s*$', message.text),
+@bot.message_handler(func=lambda message: (re.match(r'^\s*(?:TW|CN)[+\-]\s*\d+(?:\.\d+)?\s*$', message.text) or 
+                                         re.match(r'^\s*(?:[0-9/\-\.]+)\s+(?:TW|CN)[+\-]\s*\d+(?:\.\d+)?\s*$', message.text)) and
+                                         not re.match(r'^\s*(總表)?\s*TW\+\?\?\s*CN\+\?\?\s*公桶\+\?\?\s*私人\+\?\?\s*$', message.text, re.IGNORECASE),
                      content_types=['text'])
 @error_handler
 def handle_accounting_input(message):
@@ -3699,18 +3678,6 @@ def generate_total_report(month=None, year=None):
     
     return report
 
-# 處理總表按鈕
-@bot.message_handler(func=lambda message: message.text == '📊總表')
-@error_handler
-def handle_total_report(message):
-    """處理總表命令，顯示所有用戶的業績總表"""
-    # 生成總表報告
-    report = generate_total_report()
-    
-    # 發送報告
-    bot.reply_to(message, report, parse_mode='HTML')
-    logger.info(f"用戶 {message.from_user.username or message.from_user.id} 查看了總表報告")
-
 # 定義是否運行的標誌
 bot_should_run = True
 
@@ -3719,6 +3686,13 @@ def start_bot_schedule():
     global bot_should_run
     bot_should_run = True
     logging.info("排程任務: 機器人已啟動")
+    
+    # 向目標群組發送開機通知
+    try:
+        bot.send_message(TARGET_GROUP_ID, "🟢 機器人已開機，可以正常使用所有功能。")
+    except Exception as e:
+        logging.error(f"無法發送開機通知到目標群組: {e}")
+    
     # 通知管理員
     try:
         admin_ids = get_admin_ids()
@@ -3734,6 +3708,13 @@ def stop_bot_schedule():
     global bot_should_run
     bot_should_run = False
     logging.info("排程任務: 機器人已停止")
+    
+    # 向目標群組發送休眠通知
+    try:
+        bot.send_message(TARGET_GROUP_ID, "🔴 機器人準備休眠，將暫停服務。明天早上將自動開機。")
+    except Exception as e:
+        logging.error(f"無法發送休眠通知到目標群組: {e}")
+    
     # 通知管理員
     try:
         admin_ids = get_admin_ids()
@@ -3803,6 +3784,245 @@ def handle_mmdd_currency_amount(message):
     except Exception as e:
         logger.error(f"處理 MM/DD 格式記帳出錯: {str(e)}\n{traceback.format_exc()}")
         bot.reply_to(message, f"❌ 處理記帳指令時出錯：{str(e)}")
+
+# 處理更靈活的記帳格式
+@bot.message_handler(func=lambda message: 
+    (re.match(r'^\s*(?:tw|TW|台幣)\s*[+＋-－]\s*\d+(?:\.\d+)?\s*$', message.text, re.IGNORECASE) or 
+    re.match(r'^\s*(?:cn|CN|人民幣)\s*[+＋-－]\s*\d+(?:\.\d+)?\s*$', message.text, re.IGNORECASE) or
+    re.match(r'^\s*(?:[0-9]+[/\-\.][0-9]+)\s+(?:tw|TW|台幣|cn|CN|人民幣)\s*[+＋-－]\s*\d+(?:\.\d+)?\s*$', message.text, re.IGNORECASE)) and
+    not re.match(r'^\s*(總表)?\s*TW\+\?\?\s*CN\+\?\?\s*公桶\+\?\?\s*私人\+\?\?\s*$', message.text, re.IGNORECASE),
+    content_types=['text'])
+@error_handler
+def handle_flexible_accounting(message):
+    """處理更靈活的記帳格式，支援多種輸入方式"""
+    try:
+        text = message.text.strip()
+        logger.info(f"收到靈活記帳指令: {text}")
+        
+        # 處理日期 + 貨幣 + 金額格式 (如 "5/1 tw+100")
+        date_match = re.match(
+            r'^\s*([0-9]+[/\-\.][0-9]+)\s+(tw|TW|台幣|cn|CN|人民幣)\s*([+＋-－])\s*(\d+(?:\.\d+)?)\s*$', 
+            text, 
+            re.IGNORECASE
+        )
+        
+        if date_match:
+            date_str = date_match.group(1)
+            currency_raw = date_match.group(2).upper()
+            op_raw = date_match.group(3)
+            amount = float(date_match.group(4))
+            
+            # 標準化貨幣類型
+            currency = 'TW' if currency_raw.upper() in ['TW', '台幣'] else 'CN'
+            
+            # 標準化操作符號
+            op = '+' if op_raw in ['+', '＋'] else '-'
+            
+            # 如果是減號，金額轉為負數
+            if op == '-':
+                amount = -amount
+                
+            # 處理日期
+            date = parse_date(date_str)
+            date_display = datetime.strptime(date, '%Y-%m-%d').strftime('%m/%d')
+            
+            # 記錄交易
+            add_transaction(message.from_user.id, date, currency, amount)
+            
+            # 回覆確認
+            currency_display = 'NT$' if currency == 'TW' else 'CN¥'
+            action = '收入' if amount > 0 else '支出'
+            
+            bot.reply_to(
+                message, 
+                f"✅ 已記錄 {date_display} 的{currency}幣{action}：{currency_display}{abs(amount):,.0f}"
+            )
+            return
+        
+        # 處理貨幣 + 金額格式 (如 "tw+100", "CN-200")
+        direct_match = re.match(
+            r'^\s*(tw|TW|台幣|cn|CN|人民幣)\s*([+＋-－])\s*(\d+(?:\.\d+)?)\s*$', 
+            text, 
+            re.IGNORECASE
+        )
+        
+        if direct_match:
+            currency_raw = direct_match.group(1).upper()
+            op_raw = direct_match.group(2)
+            amount = float(direct_match.group(3))
+            
+            # 標準化貨幣類型
+            currency = 'TW' if currency_raw.upper() in ['TW', '台幣'] else 'CN'
+            
+            # 標準化操作符號
+            op = '+' if op_raw in ['+', '＋'] else '-'
+            
+            # 如果是減號，金額轉為負數
+            if op == '-':
+                amount = -amount
+                
+            # 今日日期
+            date = datetime.now().strftime('%Y-%m-%d')
+            
+            # 記錄交易
+            add_transaction(message.from_user.id, date, currency, amount)
+            
+            # 回覆確認
+            currency_display = 'NT$' if currency == 'TW' else 'CN¥'
+            action = '收入' if amount > 0 else '支出'
+            
+            bot.reply_to(
+                message, 
+                f"✅ 已記錄今日{currency}幣{action}：{currency_display}{abs(amount):,.0f}"
+            )
+            return
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ 處理指令時出錯：{str(e)}")
+        logger.error(f"處理靈活記帳指令出錯: {str(e)}\n{traceback.format_exc()}")
+
+# 處理更靈活的資金操作格式
+@bot.message_handler(func=lambda message: 
+    (re.match(r'^\s*(?:公桶|公共|公共資金)\s*[+＋-－]\s*\d+(?:\.\d+)?\s*$', message.text, re.IGNORECASE) or 
+    re.match(r'^\s*(?:私人|私人資金)\s*[+＋-－]\s*\d+(?:\.\d+)?\s*$', message.text, re.IGNORECASE)) and
+    not re.match(r'^\s*(總表)?\s*TW\+\?\?\s*CN\+\?\?\s*公桶\+\?\?\s*私人\+\?\?\s*$', message.text, re.IGNORECASE),
+    content_types=['text'])
+@error_handler
+def handle_flexible_fund(message):
+    """處理更靈活的資金操作格式"""
+    try:
+        # 檢查用戶是否為管理員或操作員
+        if not is_admin(message.from_user.id, message.chat.id, check_operator=True):
+            bot.reply_to(message, "❌ 此功能僅限管理員或操作員使用")
+            return
+            
+        text = message.text.strip()
+        logger.info(f"收到靈活資金操作指令: {text}")
+        
+        # 公桶資金操作
+        public_match = re.match(
+            r'^\s*(?:公桶|公共|公共資金)\s*([+＋-－])\s*(\d+(?:\.\d+)?)\s*$', 
+            text, 
+            re.IGNORECASE
+        )
+        
+        if public_match:
+            op_raw = public_match.group(1)
+            amount = float(public_match.group(2))
+            
+            # 標準化操作符號
+            op = '+' if op_raw in ['+', '＋'] else '-'
+            
+            # 如果是減號，金額轉為負數
+            if op == '-':
+                amount = -amount
+                
+            # 更新資金
+            update_fund("public", amount)
+            
+            # 回覆確認
+            if amount > 0:
+                reply = f"✅ 已添加公桶資金：USDT${amount:.2f}"
+            else:
+                reply = f"✅ 已從公桶資金中扣除：USDT${-amount:.2f}"
+                
+            bot.reply_to(message, reply)
+            return
+            
+        # 私人資金操作
+        private_match = re.match(
+            r'^\s*(?:私人|私人資金)\s*([+＋-－])\s*(\d+(?:\.\d+)?)\s*$', 
+            text, 
+            re.IGNORECASE
+        )
+        
+        if private_match:
+            op_raw = private_match.group(1)
+            amount = float(private_match.group(2))
+            
+            # 標準化操作符號
+            op = '+' if op_raw in ['+', '＋'] else '-'
+            
+            # 如果是減號，金額轉為負數
+            if op == '-':
+                amount = -amount
+                
+            # 更新資金
+            update_fund("private", amount)
+            
+            # 回覆確認
+            if amount > 0:
+                reply = f"✅ 已添加私人資金：USDT${amount:.2f}"
+            else:
+                reply = f"✅ 已從私人資金中扣除：USDT${-amount:.2f}"
+                
+            bot.reply_to(message, reply)
+            return
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ 處理指令時出錯：{str(e)}")
+        logger.error(f"處理靈活資金操作指令出錯: {str(e)}\n{traceback.format_exc()}")
+
+@bot.message_handler(commands=['help'])
+@error_handler
+def handle_help_command(message):
+    handle_help(message)
+
+# 優先處理總表請求 - 置於前方以確保優先級
+@bot.message_handler(func=lambda message: 
+    message.text in ['📊總表', '總表', '📊 總表'] or 
+    message.text.strip().startswith('總表') or
+    re.match(r'^\s*(總表)?\s*TW\+\?\?\s*CN\+\?\?\s*公桶\+\?\?\s*私人\+\?\?\s*$', message.text, re.IGNORECASE),
+    content_types=['text'])
+@error_handler
+def handle_total_report_priority(message):
+    """處理總表命令，顯示所有用戶的業績總表，支持多種格式的請求 (優先處理)"""
+    try:
+        logger.info(f"處理高優先級總表請求: {message.text}")
+        # 生成總表報告
+        report = generate_total_report()
+        
+        # 發送報告
+        bot.reply_to(message, report, parse_mode='HTML')
+        logger.info(f"用戶 {message.from_user.username or message.from_user.id} 查看了總表報告")
+    except Exception as e:
+        logger.error(f"處理總表報告時出錯: {str(e)}\n{traceback.format_exc()}")
+        bot.reply_to(message, f"❌ 生成總表報告時出錯：{str(e)}")
+
+@bot.message_handler(func=lambda message: message.text.strip() == '重啟', content_types=['text'])
+@error_handler
+def handle_restart_text_priority(message):
+    """處理純文字「重啟」命令，功能與 /restart 相同，高優先級版本"""
+    logger.info(f"收到重啟命令(高優先級處理)，發送者: {message.from_user.id}")
+    print(f"收到重啟命令(高優先級處理)，發送者: {message.from_user.id}")
+    
+    # 檢查是否為管理員
+    if not is_admin(message.from_user.id, message.chat.id):
+        bot.reply_to(message, "❌ 此命令僅限管理員使用")
+        return
+    
+    # 發送重啟提示
+    restart_msg = bot.reply_to(message, "🔄 機器人即將重新啟動，請稍候...")
+    
+    # 發送重啟提示到目標群組（如果不是在目標群組中）
+    if message.chat.id != TARGET_GROUP_ID:
+        try:
+            bot.send_message(TARGET_GROUP_ID, "🔄 機器人正在重新啟動，請稍候...")
+        except Exception as e:
+            logger.error(f"無法發送重啟通知到群組: {str(e)}")
+    
+    # 延遲一下確保消息發送成功
+    time.sleep(2)
+    
+    # 記錄重啟事件
+    logger.info(f"管理員 {message.from_user.id} 觸發機器人重啟")
+    
+    # 設置重啟標記
+    with open("restart_flag.txt", "w") as f:
+        f.write(str(datetime.now()))
+    
+    # 重啟機器人
+    restart_bot()
 
 if __name__ == "__main__":
     # 設置日誌
