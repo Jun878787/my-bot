@@ -1,0 +1,47 @@
+name: 部署到 Railway
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 設置 SSH 金鑰
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+      
+      - name: 設置 Git 配置
+        run: |
+          git config --global user.email "railway-deploy@example.com"
+          git config --global user.name "Railway Deploy Bot"
+      
+      - name: 檢出代碼 (SSH)
+        run: |
+          git clone git@github.com:${{ github.repository }}.git .
+          git checkout ${{ github.ref_name }}
+      
+      - name: 安裝 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: 安裝 Railway CLI
+        run: npm i -g @railway/cli
+
+      - name: 部署到 Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up
+
+      - name: 部署結果通知
+        if: always()
+        run: |
+          if [ ${{ job.status }} == "success" ]; then
+            echo "✅ 部署成功！"
+          else
+            echo "❌ 部署失敗！"
+          fi 

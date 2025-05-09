@@ -14,6 +14,7 @@ import traceback
 import signal
 import psutil
 import platform
+import schedule
 
 # 定義目標群組ID（請替換成你自己的群組ID）
 TARGET_GROUP_ID = -1002557176274  # 替換成你提供的ID
@@ -3706,3 +3707,121 @@ def handle_total_report(message):
     # 發送報告
     bot.reply_to(message, report, parse_mode='HTML')
     logger.info(f"用戶 {message.from_user.username or message.from_user.id} 查看了總表報告")
+
+# 定義是否運行的標誌
+bot_should_run = True
+
+# 定義啟動和關閉機器人的函數
+def start_bot_schedule():
+    global bot_should_run
+    bot_should_run = True
+    logging.info("排程任務: 機器人已啟動")
+    # 通知管理員
+    try:
+        admin_ids = get_admin_ids()
+        for admin_id in admin_ids:
+            try:
+                bot.send_message(admin_id, "⏰ 排程任務: 機器人已啟動")
+            except Exception as e:
+                logging.error(f"無法發送啟動通知給管理員 {admin_id}: {e}")
+    except Exception as e:
+        logging.error(f"啟動通知錯誤: {e}")
+
+def stop_bot_schedule():
+    global bot_should_run
+    bot_should_run = False
+    logging.info("排程任務: 機器人已停止")
+    # 通知管理員
+    try:
+        admin_ids = get_admin_ids()
+        for admin_id in admin_ids:
+            try:
+                bot.send_message(admin_id, "⏰ 排程任務: 機器人已停止服務")
+            except Exception as e:
+                logging.error(f"無法發送停止通知給管理員 {admin_id}: {e}")
+    except Exception as e:
+        logging.error(f"停止通知錯誤: {e}")
+
+# 設置排程任務
+def setup_schedule():
+    schedule.every().day.at("07:00").do(start_bot_schedule)
+    schedule.every().day.at("02:00").do(stop_bot_schedule)
+    
+    # 啟動排程檢查線程
+    def schedule_checker():
+        while True:
+            schedule.run_pending()
+            time.sleep(60)  # 每分鐘檢查一次
+    
+    scheduler_thread = threading.Thread(target=schedule_checker)
+    scheduler_thread.daemon = True
+    scheduler_thread.start()
+    logging.info("排程系統已啟動")
+
+# 新增 - 處理直接輸入的 MM/DD TW+金額 或 MM/DD CN+金額 格式
+@bot.message_handler(regexp=r'^\s*(\d{1,2}/\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$')
+@error_handler
+def handle_mmdd_currency_amount(message):
+    """處理直接輸入的 MM/DD TW+金額 或 MM/DD CN+金額 格式訊息"""
+    match = re.match(r'^\s*(\d{1,2}/\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$', message.text)
+    date_str = match.group(1)
+    currency = match.group(2)
+    op = match.group(3)
+    amount = float(match.group(4))
+    
+    if op == '-':
+        amount = -amount
+    
+    date = parse_date(date_str)
+    date_display = datetime.strptime(date, '%Y-%m-%d').strftime('%m/%d')
+    
+    add_transaction(message.from_user.id, date, currency, amount)
+    
+    if currency == 'TW':
+        currency_display = 'NT$'
+        if amount > 0:
+            action = '收入'
+        else:
+            action = '支出'
+    else:  # CN
+        currency_display = 'CN¥'
+        if amount > 0:
+            action = '收入'
+        else:
+            action = '支出'
+    
+    bot.reply_to(message, f"✅ 已記錄 {date_display} 的{currency}幣{action}：{currency_display}{abs(amount):,.0f}")
+    logger.info(f"用戶 {message.from_user.username or message.from_user.id} 使用直接輸入格式記錄了 {date_display} 的{currency}幣{action} {abs(amount)}")
+
+if __name__ == "__main__":
+    # 設置日誌
+    setup_logging()
+    # 初始化檔案
+    init_files()
+    # 設置排程
+    setup_schedule()
+    # 發送啟動通知
+    send_startup_notification()
+    # 啟動心跳檢測
+    start_heartbeat()
+    # 設置定時清理任務
+    schedule_cleaning()
+    
+    logging.info("機器人已啟動並開始監聽...")
+    
+    # 修改為考慮排程的無限循環
+    try:
+        while True:
+            try:
+                if bot_should_run:
+                    bot.polling(none_stop=True, interval=0, timeout=30)
+                else:
+                    # 當機器人應該停止時，每分鐘醒來一次檢查狀態
+                    time.sleep(60)
+            except Exception as e:
+                logging.error(f"機器人運行出錯: {e}")
+                # 錯誤後等待 5 秒再重試
+                time.sleep(5)
+    except KeyboardInterrupt:
+        logging.info("接收到鍵盤中斷，正在關閉機器人...")
+        shutdown_bot()

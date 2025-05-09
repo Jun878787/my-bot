@@ -11,6 +11,7 @@
 - 🔧 強大的群組管理功能
 - ⚙️ 可自定義的管理員權限
 - 🖥️ 網頁管理界面
+- ⏰ 定時啟動與關閉功能 (每日 7:00 啟動，凌晨 2:00 關閉)
 
 ## 安裝與設置
 
@@ -77,14 +78,109 @@ http://127.0.0.1:5000
 - `⚙️群管設定` - 管理群組設置
 - `🔒 權限管理` - 管理用戶權限
 
-## 部署到雲端
-本專案可以部署到各種雲服務商，包括：
-- Google Cloud Platform
-- DigitalOcean
-- AWS
-- Heroku
+## 部署到 Railway
 
-詳細部署指南請參考 [部署文檔](docs/deployment.md)。
+本專案已經配置好可以直接部署到 Railway 服務上，並且支援定時啟動和關閉功能。
+
+### 部署步驟
+
+1. 註冊 [Railway 賬號](https://railway.app/)
+2. 點擊控制台中的「New Project」，選擇「Deploy from GitHub repo」
+3. 授權 Railway 訪問你的 GitHub 賬號並選擇此儲存庫
+4. 設置環境變數：
+   - `BOT_TOKEN`: 你的 Telegram 機器人 Token
+   - 其他需要的環境變數
+
+5. 部署完成後，機器人將自動啟動，並會按照設定的時間表每日運行：
+   - 每天早上 7:00 自動啟動
+   - 每天凌晨 2:00 自動停止
+
+### 手動控制
+
+即使設定了自動開關機，管理員仍可以使用以下指令手動控制：
+- `重啟` - 手動重啟機器人
+- `關閉所有進程` - 手動關閉機器人
+
+### 節約資源設置
+
+Railway 的免費方案提供每月 500 小時的運行時間，使用定時開關機功能可以有效節約資源：
+- 每天運行 19 小時 (7:00 - 2:00)
+- 每月約使用 570 小時 (超出免費額度，建議調整使用時間或升級計劃)
+
+## GitHub Actions 自動部署
+
+此專案還配置了通過 GitHub Actions 自動部署到 Railway 的工作流程。
+
+### 配置步驟
+
+1. 在 GitHub 儲存庫中創建 Secrets：
+   - `RAILWAY_TOKEN`: Railway 平台的 API 令牌
+   - `SERVICE_ID`: 部署服務的 ID
+   - `DEPLOY_KEY`: GitHub 部署 SSH 金鑰 (用於解決 OAuth 認證問題)
+
+2. GitHub Actions 配置文件位於 `.github/workflows/deploy.yml`
+
+### 獲取 Railway 參數
+
+- **RAILWAY_TOKEN**:
+   - 前往 [Railway 設定頁面](https://railway.app/account)
+   - 生成並複製 API 令牌
+
+- **SERVICE_ID**:
+   - 在 Railway 專案頁面，從 URL 中獲取：
+   - `https://railway.app/project/[PROJECT_ID]/service/[SERVICE_ID]`
+
+- **DEPLOY_KEY**:
+   - 在本機生成 SSH 密鑰對：
+     ```bash
+     ssh-keygen -t ed25519 -C "railway-deploy-key" -f railway_deploy_key
+     ```
+   - 在 GitHub 儲存庫中添加部署金鑰：
+     - 前往儲存庫 > Settings > Deploy keys
+     - 點擊 "Add deploy key"
+     - 標題輸入 "Railway Deployment Key"
+     - 金鑰欄位粘貼 `railway_deploy_key.pub` 文件內容
+     - 勾選 "Allow write access"
+     - 點擊 "Add key"
+   - 將私鑰內容添加為 GitHub Secret
+
+## 常見問題解決
+
+### GitHub 身份驗證問題
+
+如果在使用 GitHub 進行 OAuth 登錄時遇到問題，可以嘗試以下解決方案：
+
+#### 方法 1: 清除瀏覽器緩存和 Cookie
+1. 清除瀏覽器的緩存和 Cookie
+2. 使用無痕/隱私瀏覽模式重新登錄
+3. 確保允許第三方 Cookie
+
+#### 方法 2: 重新授權 Railway 應用
+1. 訪問 GitHub 設定 > [Applications](https://github.com/settings/applications)
+2. 在「Authorized OAuth Apps」中尋找 Railway
+3. 點擊「Revoke」撤銷授權
+4. 重新登錄 Railway，授權應用程序
+
+#### 方法 3: 使用 SSH 金鑰替代 OAuth 認證
+1. 生成專用的 SSH 部署金鑰
+2. 在 GitHub 設置中添加該公鑰作為部署金鑰
+3. 在工作流程中使用 SSH 認證方式而非 HTTPS (已配置在最新版工作流程中)
+
+#### 方法 4: 使用 Railway CLI 設備碼登錄
+如果 Web 界面認證持續失敗，可使用 CLI 的設備碼登錄方式：
+```bash
+npm i -g @railway/cli
+railway login --browserless
+```
+然後按照提示在瀏覽器中輸入顯示的代碼完成認證
+
+#### 方法 5: 直接使用 Railway CLI
+完成認證後，可使用以下指令管理專案：
+```bash
+railway link  # 連接到現有專案
+railway up    # 部署應用
+railway service restart  # 重啟服務
+```
 
 ## 貢獻
 

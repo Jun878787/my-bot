@@ -2,25 +2,79 @@ name: Railway 定時開關機
 
 on:
   schedule:
-    # 每天上午 07:00 UTC 啟動服務 (相當於台灣時間 15:00)
-    - cron: '0 7 * * *'
-    # 每天上午 01:00 UTC 關閉服務 (相當於台灣時間 09:00)
-    - cron: '0 1 * * *'
+    # 每天上午 07:00 UTC+8 啟動服務 (台灣時間 07:00)
+    - cron: '0 23 * * *'  # UTC 23:00 相當於 台灣時間 07:00
+    # 每天凌晨 02:00 UTC+8 關閉服務 (台灣時間 02:00)
+    - cron: '0 18 * * *'  # UTC 18:00 相當於 台灣時間 02:00
   workflow_dispatch: # 允許手動觸發
 
 jobs:
   manage-railway:
     runs-on: ubuntu-latest
     steps:
-      - name: 檢查當前時間
-        id: check-time
+      - name: 設置 SSH 金鑰
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+      
+      - name: 設置 Git 配置
         run: |
-          HOUR=$(date -u +%H)
-          if [ $HOUR -eq 7 ]; then
-            echo "action=up" >> $GITHUB_OUTPUT
+          git config --global user.email "railway-deploy@example.com"
+          git config --global user.name "Railway Deploy Bot"
+      
+      - name: 檢出代碼 (SSH)
+        run: |
+          git clone git@github.com:${{ github.repository }}.git .
+          git checkout ${{ github.ref_name }}
+
+      - name: 檢查觸發時間和類型
+        id: check-action
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 手動觸發時詢問操作
+            echo "action=manual" >> $GITHUB_OUTPUT
           else
-            echo "action=down" >> $GITHUB_OUTPUT
+            # 排程觸發時根據時間判斷
+            HOUR=$(date -u +%H)
+            if [ $HOUR -eq 23 ]; then
+              echo "action=up" >> $GITHUB_OUTPUT
+            else
+              echo "action=down" >> $GITHUB_OUTPUT
+            fi
           fi
+
+      - name: 選擇手動操作 (僅限手動觸發)
+        if: steps.check-action.outputs.action == 'manual'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { createReadStream } = require('fs');
+            const { Writable } = require('stream');
+            
+            class StringWritable extends Writable {
+              constructor(options) {
+                super(options);
+                this.value = '';
+              }
+              _write(chunk, encoding, callback) {
+                this.value += chunk.toString();
+                callback();
+              }
+            }
+            
+            const output = new StringWritable();
+            
+            const result = await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'scheduler.yml',
+              ref: 'main',
+              inputs: {
+                operation: 'Please choose: 1) Start Bot 2) Stop Bot'
+              }
+            });
+            
+            return result.data;
 
       - name: 安裝Railway CLI
         run: npm i -g @railway/cli
@@ -30,7 +84,17 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           SERVICE_ID: ${{ secrets.SERVICE_ID }}
         run: |
-          ACTION=${{ steps.check-time.outputs.action }}
+          ACTION=${{ steps.check-action.outputs.action }}
+          
+          if [ "$ACTION" = "manual" ]; then
+            CHOICE="${{ steps.manual-choice.outputs.result }}"
+            if [[ "$CHOICE" == *"Start Bot"* ]]; then
+              ACTION="up"
+            else
+              ACTION="down"
+            fi
+          fi
+          
           if [ "$ACTION" = "up" ]; then
             echo "啟動 Railway 服務..."
             railway service restart $SERVICE_ID
