@@ -217,13 +217,16 @@ def update_fund(fund_type, amount):
 def parse_date(date_str):
     today = datetime.now()
     
-    if re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', date_str):
+    if re.match(r'^\\d{4}-\\d{1,2}-\\d{1,2}$', date_str):
         return date_str
-    elif re.match(r'^\d{1,2}/\d{1,2}$', date_str):
+    elif '/' in date_str:
         month, day = map(int, date_str.split('/'))
         return f"{today.year}-{month:02d}-{day:02d}"
-    elif re.match(r'^\d{1,2}-\d{1,2}$', date_str):
+    elif '-' in date_str and date_str.count('-') == 1:  # For MM-DD format
         month, day = map(int, date_str.split('-'))
+        return f"{today.year}-{month:02d}-{day:02d}"
+    elif '.' in date_str:  # For MM.DD format
+        month, day = map(int, date_str.split('.'))
         return f"{today.year}-{month:02d}-{day:02d}"
     else:
         return today.strftime('%Y-%m-%d')
@@ -3759,7 +3762,7 @@ def setup_schedule():
     logging.info("排程系統已啟動")
 
 # 處理直接輸入的 MM/DD 格式 (例如：5/01 TW+10000)
-@bot.message_handler(regexp=r'^\s*(\d{1,2}/\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$')
+@bot.message_handler(regexp=r'^\s*(\d{1,2}[/\-\.]\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$')
 @error_handler
 def handle_mmdd_currency_amount(message):
     """處理直接輸入的 MM/DD 貨幣格式 金額 (例如：5/01 TW+10000)"""
@@ -3767,7 +3770,7 @@ def handle_mmdd_currency_amount(message):
     print(f"收到 MM/DD 格式記帳訊息: {message.text}")  # 添加終端輸出便於調試
     
     try:
-        match = re.match(r'^\s*(\d{1,2}/\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$', message.text)
+        match = re.match(r'^\s*(\d{1,2}[/\-\.]\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$', message.text)
         date_str = match.group(1)
         currency = match.group(2)
         op = match.group(3)
