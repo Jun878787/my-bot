@@ -3793,6 +3793,46 @@ def handle_mmdd_currency_amount(message):
     bot.reply_to(message, f"✅ 已記錄 {date_display} 的{currency}幣{action}：{currency_display}{abs(amount):,.0f}")
     logger.info(f"用戶 {message.from_user.username or message.from_user.id} 使用直接輸入格式記錄了 {date_display} 的{currency}幣{action} {abs(amount)}")
 
+# 新增 - 處理直接輸入的 MM/DD TW+金額 或 MM/DD CN+金額 格式
+@bot.message_handler(regexp=r'^\s*(\d{1,2}/\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$')
+@error_handler
+def handle_mmdd_currency_amount(message):
+    """處理直接輸入的 MM/DD TW+金額 或 MM/DD CN+金額 格式訊息"""
+    logger.info(f"接收到 MM/DD 格式記帳訊息: {message.text} 來自用戶 {message.from_user.username or message.from_user.id}")
+    try:
+        match = re.match(r'^\s*(\d{1,2}/\d{1,2})\s+(TW|CN)([+\-])\s*(\d+(\.\d+)?)\s*$', message.text)
+        date_str = match.group(1)
+        currency = match.group(2)
+        op = match.group(3)
+        amount = float(match.group(4))
+        
+        if op == '-':
+            amount = -amount
+        
+        date = parse_date(date_str)
+        date_display = datetime.strptime(date, '%Y-%m-%d').strftime('%m/%d')
+        
+        add_transaction(message.from_user.id, date, currency, amount)
+        
+        if currency == 'TW':
+            currency_display = 'NT$'
+            if amount > 0:
+                action = '收入'
+            else:
+                action = '支出'
+        else:  # CN
+            currency_display = 'CN¥'
+            if amount > 0:
+                action = '收入'
+            else:
+                action = '支出'
+        
+        bot.reply_to(message, f"✅ 已記錄 {date_display} 的{currency}幣{action}：{currency_display}{abs(amount):,.0f}")
+        logger.info(f"用戶 {message.from_user.username or message.from_user.id} 使用直接輸入格式記錄了 {date_display} 的{currency}幣{action} {abs(amount)}")
+    except Exception as e:
+        logger.error(f"處理 MM/DD 格式記帳出錯: {str(e)}\n{traceback.format_exc()}")
+        bot.reply_to(message, f"❌ 處理記帳指令時出錯：{str(e)}")
+    
 if __name__ == "__main__":
     # 設置日誌
     setup_logging()
