@@ -15,6 +15,7 @@ import signal
 import psutil
 import platform
 import schedule
+import logging.handlers
 
 # 定義目標群組ID（請替換成你自己的群組ID）
 TARGET_GROUP_ID = -1002557176274  # 替換成你提供的ID
@@ -96,16 +97,43 @@ user_states = {}
 
 # 設置日誌
 def setup_logging():
+    """設置日誌記錄"""
+    logger = logging.getLogger('bot_logger')
+    logger.setLevel(logging.INFO)
+    
+    # 確保日誌目錄存在
     if not os.path.exists('logs'):
         os.makedirs('logs')
-    current_date = datetime.now().strftime('%Y-%m-%d')
-    log_file = f'logs/bot_log_{current_date}.txt'
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(message)s',
-        handlers=[logging.FileHandler(log_file, encoding='utf-8'), logging.StreamHandler()]
+    
+    # 檔案處理器，設定每天輪替的日誌文件
+    file_handler = logging.handlers.TimedRotatingFileHandler(
+        'logs/bot.log',
+        when='midnight',
+        interval=1,
+        backupCount=7,
+        encoding='utf-8'
     )
-    return logging.getLogger('BotLogger')
+    file_handler.setLevel(logging.INFO)
+    
+    # 同時輸出到控制台
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # 設定日誌格式
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # 添加處理器
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    # 設定為全局 logger
+    logging.root = logger
+    
+    print("日誌系統已設置 - 輸出到 logs/bot.log 和控制台")
+    logging.info("機器人日誌系統初始化完成")
+    return logger
 
 logger = setup_logging()
 
@@ -3978,15 +4006,20 @@ def handle_help_command(message):
 def handle_total_report_priority(message):
     """處理總表命令，顯示所有用戶的業績總表，支持多種格式的請求 (優先處理)"""
     try:
-        logger.info(f"處理高優先級總表請求: {message.text}")
+        # 添加更詳細的日誌
+        logger.info(f"收到總表請求: '{message.text}' 從用戶ID: {message.from_user.id}, 用戶名: {message.from_user.username or '未設置'}")
+        print(f"處理總表請求: {message.text}")
+        
         # 生成總表報告
         report = generate_total_report()
         
         # 發送報告
-        bot.reply_to(message, report, parse_mode='HTML')
-        logger.info(f"用戶 {message.from_user.username or message.from_user.id} 查看了總表報告")
+        sent_msg = bot.reply_to(message, report, parse_mode='HTML')
+        logger.info(f"已發送總表報告，訊息ID: {sent_msg.message_id}")
+        print(f"已發送總表報告給用戶ID: {message.from_user.id}")
     except Exception as e:
         logger.error(f"處理總表報告時出錯: {str(e)}\n{traceback.format_exc()}")
+        print(f"總表處理錯誤: {str(e)}")
         bot.reply_to(message, f"❌ 生成總表報告時出錯：{str(e)}")
 
 @bot.message_handler(func=lambda message: message.text.strip() == '重啟', content_types=['text'])
@@ -4024,6 +4057,45 @@ def handle_restart_text_priority(message):
     # 重啟機器人
     restart_bot()
 
+# 在文件初始部分添加額外的調試配置
+import sys
+DEBUG_MODE = True  # 設置為True開啟額外調試
+
+if DEBUG_MODE:
+    print("=== 機器人啟動於調試模式 ===")
+
+# 添加一個簡單的測試命令處理函數，放在優先位置
+@bot.message_handler(commands=['test', 'ping'])
+@error_handler
+def handle_test_command(message):
+    """處理測試命令，用於檢查機器人是否正常響應"""
+    print(f"收到測試命令: {message.text} 從用戶ID: {message.from_user.id}")
+    logger.info(f"收到測試命令: {message.text} 從用戶ID: {message.from_user.id}")
+    
+    try:
+        # 發送回應消息
+        sent_msg = bot.reply_to(message, "✅ 機器人正常運行中！")
+        logger.info(f"已發送測試回應，消息ID: {sent_msg.message_id}")
+    except Exception as e:
+        error_msg = f"測試命令處理錯誤: {str(e)}"
+        print(error_msg)
+        logger.error(f"{error_msg}\n{traceback.format_exc()}")
+        try:
+            bot.reply_to(message, f"❌ 測試失敗: {str(e)}")
+        except:
+            print("無法發送錯誤回應")
+
+# 添加一個通用消息處理器用於調試，放在文件的最後部分
+if DEBUG_MODE:
+    @bot.message_handler(func=lambda message: True, content_types=['text'])
+    def handle_all_messages(message):
+        """捕獲所有未被其他處理器處理的消息（僅調試用）"""
+        print(f"收到未處理的消息: '{message.text}' 從用戶ID: {message.from_user.id}")
+        logger.info(f"收到未處理的消息: '{message.text}' 從用戶ID: {message.from_user.id}")
+        # 在調試模式下，可以選擇是否回應
+        # bot.reply_to(message, "⚠️ 抱歉，無法處理此指令。")
+
+# 修改主循環部分
 if __name__ == "__main__":
     # 設置日誌
     setup_logging()
@@ -4039,20 +4111,28 @@ if __name__ == "__main__":
     schedule_cleaning()
     
     logging.info("機器人已啟動並開始監聽...")
+    print("=== 機器人已啟動並開始監聽 ===")
     
     # 修改為考慮排程的無限循環
     try:
+        print("開始輪詢消息...")
         while True:
             try:
                 if bot_should_run:
-                    bot.polling(none_stop=True, interval=0, timeout=30)
+                    print("正在輪詢消息中...")
+                    bot.polling(none_stop=True, interval=1, timeout=30)
+                    print("輪詢週期結束")
                 else:
+                    print("機器人當前設定為不運行狀態")
                     # 當機器人應該停止時，每分鐘醒來一次檢查狀態
                     time.sleep(60)
             except Exception as e:
-                logging.error(f"機器人運行出錯: {e}")
+                error_msg = f"機器人運行出錯: {e}"
+                print(error_msg)
+                logging.error(error_msg)
                 # 錯誤後等待 5 秒再重試
                 time.sleep(5)
     except KeyboardInterrupt:
         logging.info("接收到鍵盤中斷，正在關閉機器人...")
+        print("接收到鍵盤中斷，正在關閉機器人...")
         shutdown_bot()
