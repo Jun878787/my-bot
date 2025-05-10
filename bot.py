@@ -16,6 +16,9 @@ import psutil
 import platform
 import schedule
 import logging.handlers
+import requests
+import uuid
+from telebot import types, apihelper, util
 
 # 定義目標群組ID（請替換成你自己的群組ID）
 TARGET_GROUP_ID = -1002557176274  # 替換成你提供的ID
@@ -4095,44 +4098,171 @@ if DEBUG_MODE:
         # 在調試模式下，可以選擇是否回應
         # bot.reply_to(message, "⚠️ 抱歉，無法處理此指令。")
 
+# 添加鎖定機制防止多實例
+LOCK_FILE = "bot_instance.lock"
+
+def check_instance_running():
+    """檢查是否已有實例在運行"""
+    try:
+        # 檢查鎖文件是否存在
+        if os.path.exists(LOCK_FILE):
+            # 讀取PID
+            with open(LOCK_FILE, 'r') as f:
+                pid = f.read().strip()
+                
+            # 檢查進程是否存在
+            try:
+                if platform.system() == "Windows":
+                    # Windows下檢查進程
+                    import ctypes
+                    kernel32 = ctypes.windll.kernel32
+                    SYNCHRONIZE = 0x100000
+                    process = kernel32.OpenProcess(SYNCHRONIZE, False, int(pid))
+                    if process != 0:
+                        kernel32.CloseHandle(process)
+                        return True
+                else:
+                    # Linux/Unix下檢查進程
+                    os.kill(int(pid), 0)
+                    return True
+            except (OSError, ValueError):
+                # 進程不存在，可以安全刪除鎖文件
+                pass
+                
+            # 舊鎖文件對應的進程已不存在，刪除它
+            os.remove(LOCK_FILE)
+            
+        # 創建新的鎖文件
+        with open(LOCK_FILE, 'w') as f:
+            f.write(str(os.getpid()))
+            
+        return False
+        
+    except Exception as e:
+        print(f"檢查實例時出錯: {e}")
+        return False
+
+def release_lock():
+    """釋放鎖文件"""
+    if os.path.exists(LOCK_FILE):
+        try:
+            os.remove(LOCK_FILE)
+            print("鎖文件已移除")
+        except Exception as e:
+            print(f"移除鎖文件時出錯: {e}")
+
+# 設置網絡重試
+def create_robust_session():
+    """創建具有重試功能的請求會話"""
+    session = requests.Session()
+    retry_strategy = requests.adapters.Retry(
+        total=5,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "POST"]
+    )
+    adapter = requests.adapters.HTTPAdapter(max_retries=retry_strategy)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
 # 修改主循環部分
 if __name__ == "__main__":
-    # 設置日誌
-    setup_logging()
-    # 初始化檔案
-    init_files()
-    # 設置排程
-    setup_schedule()
-    # 發送啟動通知
-    send_startup_notification()
-    # 啟動心跳檢測
-    start_heartbeat()
-    # 設置定時清理任務
-    schedule_cleaning()
-    
-    logging.info("機器人已啟動並開始監聽...")
-    print("=== 機器人已啟動並開始監聽 ===")
-    
-    # 修改為考慮排程的無限循環
     try:
+        # 檢查是否已有實例在運行
+        if check_instance_running():
+            print("檢測到另一個機器人實例已在運行！終止此實例。")
+            sys.exit(1)
+            
+        # 設置退出處理
+        def handle_exit(*args, **kwargs):
+            print("接收到退出信號，正在清理...")
+            release_lock()
+            sys.exit(0)
+            
+        # 註冊信號處理
+        signal.signal(signal.SIGINT, handle_exit)
+        signal.signal(signal.SIGTERM, handle_exit)
+        
+        # 使用自定義會話
+        apihelper.SESSION = create_robust_session()
+        
+        # 設置更長的連接超時
+        apihelper.READ_TIMEOUT = 30
+        apihelper.CONNECT_TIMEOUT = 10
+        
+        # 設置日誌
+        setup_logging()
+        # 初始化檔案
+        init_files()
+        # 設置排程
+        setup_schedule()
+        # 發送啟動通知
+        send_startup_notification()
+        # 啟動心跳檢測
+        start_heartbeat()
+        # 設置定時清理任務
+        schedule_cleaning()
+        
+        logging.info("機器人已啟動並開始監聽...")
+        print("=== 機器人已啟動並開始監聽 ===")
+        
+        # 修改為考慮排程的無限循環
         print("開始輪詢消息...")
+        reconnect_count = 0
+        
         while True:
             try:
                 if bot_should_run:
-                    print("正在輪詢消息中...")
-                    bot.polling(none_stop=True, interval=1, timeout=30)
+                    print(f"正在輪詢消息中... (重連次數: {reconnect_count})")
+                    # 使用非線程輪詢，以避免多線程衝突
+                    bot.polling(none_stop=True, interval=3, timeout=30, long_polling_timeout=10)
                     print("輪詢週期結束")
                 else:
                     print("機器人當前設定為不運行狀態")
                     # 當機器人應該停止時，每分鐘醒來一次檢查狀態
                     time.sleep(60)
-            except Exception as e:
-                error_msg = f"機器人運行出錯: {e}"
+                    
+                # 如果沒有異常，重置重連計數
+                reconnect_count = 0
+                    
+            except requests.exceptions.ConnectionError as e:
+                error_msg = f"連接錯誤: {e}"
                 print(error_msg)
                 logging.error(error_msg)
-                # 錯誤後等待 5 秒再重試
+                reconnect_count += 1
+                # 連接錯誤後等待時間隨重連次數增加
+                sleep_time = min(30, 5 * reconnect_count)
+                print(f"等待 {sleep_time} 秒後重試...")
+                time.sleep(sleep_time)
+                
+            except telebot.apihelper.ApiTelegramException as e:
+                if "Conflict" in str(e):
+                    error_msg = f"API衝突錯誤(可能有多個實例): {e}"
+                    print(error_msg)
+                    logging.error(error_msg)
+                    # 衝突錯誤需要較長等待
+                    time.sleep(10)
+                else:
+                    error_msg = f"Telegram API錯誤: {e}"
+                    print(error_msg)
+                    logging.error(error_msg)
+                    time.sleep(5)
+                
+            except Exception as e:
+                error_msg = f"機器人運行出錯: {e}\n{traceback.format_exc()}"
+                print(error_msg)
+                logging.error(error_msg)
+                # 其他錯誤後等待 5 秒再重試
                 time.sleep(5)
+                
     except KeyboardInterrupt:
         logging.info("接收到鍵盤中斷，正在關閉機器人...")
         print("接收到鍵盤中斷，正在關閉機器人...")
+        release_lock()
         shutdown_bot()
+    except Exception as e:
+        print(f"主程序異常: {e}")
+        logging.error(f"主程序異常: {e}\n{traceback.format_exc()}")
+        release_lock()
+        sys.exit(1)
